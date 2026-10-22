@@ -23,15 +23,46 @@ void writeChunk(Chunk* chunk, uint8_t byte, int line) {
     int oldCapacity = chunk->capacity;
     chunk->capacity = GROW_CAPACITY(oldCapacity);
     chunk->code = GROW_ARRAY(uint8_t, chunk->code, oldCapacity, chunk->capacity);
-    chunk->lines = GROW_ARRAY(int, chunk->lines, oldCapacity, chunk->capacity);
+  }
+
+  if (chunk->lineCapacity < chunk->lineCount + 1) {
+    int oldLineCapacity = chunk->lineCapacity;
+    chunk->lineCapacity = GROW_CAPACITY(oldLineCapacity);
+    chunk->lines = GROW_ARRAY(LineRun, chunk->lines, oldLineCapacity, chunk->lineCapacity);
   }
 
   chunk->code[chunk->count] = byte;
-  chunk->lines[chunk->count] = line;
   chunk->count++;
+
+  // chunk->lineCount counts the number of LineRun entries
+  // LineRun.count counts the instructions
+  if (chunk->lineCount == 0) {
+    LineRun firstRun = {line, 1};
+    chunk->lines[0] = firstRun;
+    chunk->lineCount++;
+  } else if (chunk->lines[chunk->lineCount - 1].line == line) {
+    chunk->lines[chunk->lineCount - 1].count++;
+  } else {
+    LineRun newRun = {line, 1};
+    chunk->lines[chunk->lineCount] = newRun;
+    chunk->lineCount++;
+  }
 }
 
 int addConstant(Chunk* chunk, Value value) {
   writeValueArray(&chunk->constants, value);
   return chunk->constants.count - 1;
+}
+
+int getLine(Chunk* chunk, int instructionIndex) {
+  int instructionsSeen = 0;
+
+  for (int run = 0; run < chunk->lineCount; run++) {
+    instructionsSeen += chunk->lines[run].count;
+    if (instructionIndex < instructionsSeen) {
+      return chunk->lines[run].line;
+    }
+  }
+
+  return -1;
 }
